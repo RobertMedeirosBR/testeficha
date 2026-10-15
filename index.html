@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Jornada RPG — Ficha, Kit & Painel do Mestre</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="min-h-screen p-3 md:p-8">
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <!-- Hidden File Input for JSON Import -->
+    <input type="file" id="json-import-input" accept=".json" class="hidden" onchange="handleImportJSON(event)">
+
+    <div class="max-w-6xl mx-auto space-y-4 md:space-y-6">
+        
+        <!-- Top Navigation / Mode Switcher -->
+        <div class="flex flex-col md:flex-row justify-between items-center bg-zinc-950 border border-zinc-800 p-3 md:p-4 rounded-lg gap-3">
+            <div class="flex flex-wrap gap-2 w-full md:w-auto items-center">
+                <button type="button" onclick="switchTab('player')" id="btn-player" class="flex-1 md:flex-none px-4 py-2 text-xs md:text-sm uppercase tracking-wider font-bold border border-white bg-white text-black transition">Ficha</button>
+                <button type="button" onclick="switchTab('kit')" id="btn-kit" class="flex-1 md:flex-none px-4 py-2 text-xs md:text-sm uppercase tracking-wider font-bold border border-zinc-700 bg-black text-white hover:border-white transition">Kit de Habilidades</button>
+                <button type="button" onclick="switchTab('master')" id="btn-master" class="flex-1 md:flex-none px-4 py-2 text-xs md:text-sm uppercase tracking-wider font-bold border border-zinc-700 bg-black text-white hover:border-white transition">Mestre</button>
+                <span id="live-sync-indicator" class="hidden items-center gap-1.5 text-[11px] text-green-400 px-2 py-1 border border-green-900/60 bg-green-950/30 rounded">
+                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> Ao Vivo
+                </span>
+                <span id="cloud-dirty-indicator" class="hidden items-center gap-1 text-[11px] text-amber-400 px-2 py-1 border border-amber-900/60 bg-amber-950/30 rounded">
+                    ● A guardar...
+                </span>
+            </div>
+            
+            <!-- Cloud / Export / Import Controls -->
+            <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                <input type="text" id="char-id" placeholder="ID Personagem..." class="p-2 text-xs border rounded w-28 md:w-36" oninput="markDirtyAndSave()">
+                <button type="button" id="btn-save-cloud" onclick="saveToCloud()" class="px-3 py-2 text-xs uppercase tracking-wider border border-zinc-600 bg-zinc-900 hover:border-white transition font-bold">Salvar</button>
+                <button type="button" onclick="loadFromCloud()" class="px-3 py-2 text-xs uppercase tracking-wider border border-zinc-600 bg-zinc-900 hover:border-white transition font-bold">Carregar</button>
+                <button type="button" onclick="deleteFromCloud()" class="px-3 py-2 text-xs uppercase tracking-wider border border-red-900 text-red-400 bg-red-950/40 hover:bg-red-950 transition font-bold">Apagar</button>
+                <button type="button" onclick="exportJSON()" title="Exportar Ficha JSON" class="px-2.5 py-2 text-xs uppercase tracking-wider border border-zinc-700 hover:border-white transition">Exportar</button>
+                <button type="button" onclick="triggerImportJSON()" title="Importar Ficha JSON" class="px-2.5 py-2 text-xs uppercase tracking-wider border border-zinc-700 hover:border-white transition">Importar</button>
+                <button type="button" onclick="resetData()" class="px-2.5 py-2 text-xs uppercase tracking-wider border border-zinc-700 hover:border-white transition">Limpar</button>
+            </div>
+        </div>
+
+        <!-- Quick Reference Guides Bar -->
+        <div class="flex flex-wrap justify-between items-center bg-zinc-950/60 border border-zinc-900 px-4 py-2.5 rounded-lg gap-2">
+            <span class="text-xs text-zinc-400 uppercase tracking-widest">Consultas Rápidas do Sistema:</span>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="togglePathGuideModal()" class="px-3 py-1 text-xs uppercase tracking-wider border border-zinc-700 bg-black hover:border-white rounded transition">📖 Guia dos Caminhos Vivos</button>
+                <button type="button" onclick="toggleElementsGuideModal()" class="px-3 py-1 text-xs uppercase tracking-wider border border-zinc-700 bg-black hover:border-white rounded transition">✨ Guia de Elementos & DoTs</button>
+            </div>
+        </div>
+
+        <!-- ================= PLAYER VIEW (FICHA) ================= -->
+        <div id="view-player" class="space-y-4 md:space-y-6 tab-animate">
+            
+            <!-- Header Info -->
+            <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                <div class="sm:col-span-2 lg:col-span-2">
+                    <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Nome do Personagem</label>
+                    <input type="text" id="char-name" class="w-full p-2.5 border rounded" placeholder="Nome..." oninput="onCharacterInput()">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Jogador</label>
+                    <input type="text" id="player-name" class="w-full p-2.5 border rounded" placeholder="Jogador..." oninput="markDirtyAndSave()">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Raça</label>
+                    <input type="text" id="char-race" class="w-full p-2.5 border rounded" placeholder="Raça..." oninput="markDirtyAndSave()">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Planeta/Origem</label>
+                    <input type="text" id="char-origin" class="w-full p-2.5 border rounded" placeholder="Origem..." oninput="markDirtyAndSave()">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Nível Atual</label>
+                    <input type="number" id="char-level" value="1" min="1" max="20" class="w-full p-2.5 border rounded text-center" onchange="calculateVitals(); markDirtyAndSave();">
+                </div>
+            </div>
+
+            <!-- Path, Element & Vitals Row -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                <!-- Entity Path & Element (Clean without parentheses) -->
+                <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-3">
+                        <div>
+                            <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Caminho da Entidade</label>
+                            <select id="entity-path" class="w-full p-2.5 border rounded" onchange="onPathChange()">
+                                <option value="A Guerra">A Guerra</option>
+                                <option value="A Fome">A Fome</option>
+                                <option value="A Evolução">A Evolução</option>
+                                <option value="A Preservação">A Preservação</option>
+                                <option value="A Cura">A Cura</option>
+                                <option value="A Inteligência">A Inteligência</option>
+                                <option value="A Mentira">A Mentira</option>
+                                <option value="A Reminiscência">A Reminiscência</option>
+                                <option value="A Ordem">A Ordem</option>
+                                <option value="O Espaço">O Espaço</option>
+                                <option value="A Diversão">A Diversão</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Elemento Principal</label>
+                            <select id="char-element" class="w-full p-2.5 border rounded" onchange="onElementChange()">
+                                <option value="Físico">Físico</option>
+                                <option value="Fogo">Fogo</option>
+                                <option value="Água">Água</option>
+                                <option value="Terra">Terra</option>
+                                <option value="Vento">Vento</option>
+                                <option value="Raio">Raio</option>
+                                <option value="Gelo">Gelo</option>
+                                <option value="Luz">Luz</option>
+                                <option value="Vazio">Vazio</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="text-xs text-zinc-400 space-y-1 border-t border-zinc-900 pt-2">
+                        <p id="path-info-pv">PV Base: 250 | Ganho/Nível: +50</p>
+                        <p id="path-info-pp">PP Base: 50 | Ganho/Nível: +10</p>
+                        <p id="element-info-effect" class="text-zinc-300 pt-1"></p>
+                    </div>
+                </div>
+
+                <!-- PV, PP, Shield & Active Status/DoTs -->
+                <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg md:col-span-2 flex flex-col justify-between space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <!-- PV Card with Dynamic Bar -->
+                        <div id="pv-card-box" class="border border-zinc-800 p-4 rounded flex flex-col justify-between space-y-2.5 transition">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs uppercase tracking-widest font-bold text-red-400">Pontos de Vida (PV)</span>
+                                <span class="text-xs text-zinc-400">Máx: <span id="max-pv" class="text-white font-bold">300</span></span>
+                            </div>
+                            <input type="number" id="current-pv" value="300" class="w-full p-2 text-center text-xl font-bold border rounded" oninput="onVitalsInput()">
+                            <div class="vital-bar-bg">
+                                <div id="pv-bar-fill" class="vital-bar-fill bg-red-600" style="width: 100%;"></div>
+                            </div>
+                        </div>
+
+                        <!-- PP Card with Dynamic Bar -->
+                        <div class="border border-zinc-800 p-4 rounded flex flex-col justify-between space-y-2.5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs uppercase tracking-widest font-bold text-blue-400">Pontos de Poder (PP)</span>
+                                <span class="text-xs text-zinc-400">Máx: <span id="max-pp" class="text-white font-bold">70</span></span>
+                            </div>
+                            <input type="number" id="current-pp" value="70" class="w-full p-2 text-center text-xl font-bold border rounded" oninput="onVitalsInput()">
+                            <div class="vital-bar-bg">
+                                <div id="pp-bar-fill" class="vital-bar-fill bg-blue-500" style="width: 100%;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Shield Card -->
+                        <div class="border border-zinc-800 p-4 rounded flex flex-col justify-between space-y-2.5">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs uppercase tracking-widest font-bold text-amber-300">Escudo / Barreira</span>
+                                <span class="text-[10px] text-zinc-500">Absorve Dano</span>
+                            </div>
+                            <input type="number" id="current-shield" value="0" min="0" class="w-full p-2 text-center text-xl font-bold border rounded" oninput="onVitalsInput()">
+                            <div class="text-[10px] text-zinc-500 text-center">Desconta antes do PV</div>
+                        </div>
+                    </div>
+
+                    <!-- Active Status / DoTs Tracker -->
+                    <div class="border border-zinc-800 p-3 rounded bg-black/50 space-y-2">
+                        <div class="flex flex-wrap justify-between items-center gap-2">
+                            <span class="text-xs uppercase tracking-widest font-bold text-zinc-300">Condições Ativas / DoTs / Efeitos</span>
+                            <div class="flex gap-1.5">
+                                <select id="status-preset-select" class="text-xs p-1 border rounded">
+                                    <option value="">+ Adicionar Efeito...</option>
+                                    <option value="Slow">Slow</option>
+                                    <option value="Queimadura">Queimadura</option>
+                                    <option value="Desequilíbrio">Desequilíbrio</option>
+                                    <option value="Cisalhamento 1x">Cisalhamento 1x</option>
+                                    <option value="Cisalhamento 2x">Cisalhamento 2x</option>
+                                    <option value="Cisalhamento 3x">Cisalhamento 3x</option>
+                                    <option value="Cisalhamento 4x">Cisalhamento 4x</option>
+                                    <option value="Cisalhamento 5x">Cisalhamento 5x</option>
+                                    <option value="Choque">Choque</option>
+                                    <option value="Congelamento">Congelamento</option>
+                                    <option value="Sangramento">Sangramento</option>
+                                    <option value="Ofuscamento">Ofuscamento</option>
+                                    <option value="Anulação">Anulação</option>
+                                    <option value="Escudo Ativo">Escudo Ativo</option>
+                                </select>
+                                <button type="button" onclick="addSelectedStatus()" class="px-2.5 py-1 text-xs uppercase border border-zinc-700 hover:border-white bg-zinc-900 rounded font-bold">Adicionar</button>
+                            </div>
+                        </div>
+                        <div id="active-status-list" class="flex flex-wrap gap-1.5 pt-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attributes & Dice Rolling -->
+            <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg space-y-4 md:space-y-6">
+                <div class="flex flex-wrap justify-between items-center border-b border-zinc-800 pb-3">
+                    <h2 class="text-base md:text-lg uppercase tracking-wider font-bold">Atributos Principais</h2>
+                    <span class="text-xs text-zinc-400">Atributo 0 = Rola 2d20 e pega o pior resultado</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <!-- Vigor -->
+                    <div class="border border-zinc-800 p-4 rounded space-y-3 hover:border-zinc-600 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold uppercase tracking-wider text-sm">Vigor</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="adjustAttribute('vigor', -1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">-</button>
+                                <input type="number" id="attr-vigor" value="1" min="0" max="5" onchange="validateAttributes(); markDirtyAndSave();" class="w-12 text-center p-1 border rounded text-sm">
+                                <button type="button" onclick="adjustAttribute('vigor', 1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">+</button>
+                            </div>
+                        </div>
+                        <button type="button" onclick="rollAttributeDice('Vigor', document.getElementById('attr-vigor').value)" class="w-full py-2 text-xs uppercase tracking-widest border border-zinc-700 hover:border-white bg-zinc-900/50 hover:bg-zinc-900 rounded transition">Rolar D20 (<span id="pool-vigor">1d20</span>)</button>
+                    </div>
+
+                    <!-- Destreza -->
+                    <div class="border border-zinc-800 p-4 rounded space-y-3 hover:border-zinc-600 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold uppercase tracking-wider text-sm">Destreza</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="adjustAttribute('destreza', -1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">-</button>
+                                <input type="number" id="attr-destreza" value="1" min="0" max="5" onchange="validateAttributes(); markDirtyAndSave();" class="w-12 text-center p-1 border rounded text-sm">
+                                <button type="button" onclick="adjustAttribute('destreza', 1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">+</button>
+                            </div>
+                        </div>
+                        <button type="button" onclick="rollAttributeDice('Destreza', document.getElementById('attr-destreza').value)" class="w-full py-2 text-xs uppercase tracking-widest border border-zinc-700 hover:border-white bg-zinc-900/50 hover:bg-zinc-900 rounded transition">Rolar D20 (<span id="pool-destreza">1d20</span>)</button>
+                    </div>
+
+                    <!-- Mente -->
+                    <div class="border border-zinc-800 p-4 rounded space-y-3 hover:border-zinc-600 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold uppercase tracking-wider text-sm">Mente</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="adjustAttribute('mente', -1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">-</button>
+                                <input type="number" id="attr-mente" value="1" min="0" max="5" onchange="validateAttributes(); markDirtyAndSave();" class="w-12 text-center p-1 border rounded text-sm">
+                                <button type="button" onclick="adjustAttribute('mente', 1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">+</button>
+                            </div>
+                        </div>
+                        <button type="button" onclick="rollAttributeDice('Mente', document.getElementById('attr-mente').value)" class="w-full py-2 text-xs uppercase tracking-widest border border-zinc-700 hover:border-white bg-zinc-900/50 hover:bg-zinc-900 rounded transition">Rolar D20 (<span id="pool-mente">1d20</span>)</button>
+                    </div>
+
+                    <!-- Determinação -->
+                    <div class="border border-zinc-800 p-4 rounded space-y-3 hover:border-zinc-600 transition">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold uppercase tracking-wider text-sm">Determinação</span>
+                            <div class="flex items-center gap-1.5">
+                                <button type="button" onclick="adjustAttribute('determinacao', -1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">-</button>
+                                <input type="number" id="attr-determinacao" value="1" min="0" max="5" onchange="validateAttributes(); markDirtyAndSave();" class="w-12 text-center p-1 border rounded text-sm">
+                                <button type="button" onclick="adjustAttribute('determinacao', 1)" class="w-8 h-8 border border-zinc-700 hover:border-white font-bold rounded">+</button>
+                            </div>
+                        </div>
+                        <button type="button" onclick="rollAttributeDice('Determinação', document.getElementById('attr-determinacao').value)" class="w-full py-2 text-xs uppercase tracking-widest border border-zinc-700 hover:border-white bg-zinc-900/50 hover:bg-zinc-900 rounded transition">Rolar D20 (<span id="pool-determinacao">1d20</span>)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Skills Section -->
+            <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg space-y-4 md:space-y-6">
+                <div class="flex flex-wrap justify-between items-center border-b border-zinc-800 pb-3">
+                    <h2 class="text-base md:text-lg uppercase tracking-wider font-bold">Perícias</h2>
+                    <span class="text-xs text-zinc-400">Clica em 🎲 para rolar (Atributo d20 + Perícia)</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                    <div class="space-y-3 border border-zinc-800 p-4 rounded">
+                        <h3 class="text-sm font-bold uppercase tracking-widest border-b border-zinc-800 pb-2">Vigor</h3>
+                        <div id="skills-vigor-container" class="space-y-3"></div>
+                    </div>
+                    <div class="space-y-3 border border-zinc-800 p-4 rounded">
+                        <h3 class="text-sm font-bold uppercase tracking-widest border-b border-zinc-800 pb-2">Destreza</h3>
+                        <div id="skills-destreza-container" class="space-y-3"></div>
+                    </div>
+                    <div class="space-y-3 border border-zinc-800 p-4 rounded">
+                        <h3 class="text-sm font-bold uppercase tracking-widest border-b border-zinc-800 pb-2">Mente</h3>
+                        <div id="skills-mente-container" class="space-y-3"></div>
+                    </div>
+                    <div class="space-y-3 border border-zinc-800 p-4 rounded">
+                        <h3 class="text-sm font-bold uppercase tracking-widest border-b border-zinc-800 pb-2">Determinação</h3>
+                        <div id="skills-determinacao-container" class="space-y-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory & Notes -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg space-y-3">
+                    <h2 class="text-xs md:text-sm uppercase tracking-widest font-bold">Inventário / Equipamentos</h2>
+                    <textarea id="char-inventory" rows="4" class="w-full p-3 border rounded text-sm" placeholder="Itens, armas..." oninput="markDirtyAndSave()"></textarea>
+                </div>
+                <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg space-y-3">
+                    <h2 class="text-xs md:text-sm uppercase tracking-widest font-bold">Anotações / Lore</h2>
+                    <textarea id="char-notes" rows="4" class="w-full p-3 border rounded text-sm" placeholder="Notas da campanha..." oninput="markDirtyAndSave()"></textarea>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ================= KIT DE HABILIDADES VIEW ================= -->
+        <div id="view-kit" class="space-y-6 hidden tab-animate">
+            
+            <!-- Kit Toolbar -->
+            <div class="bg-zinc-950 border border-zinc-800 p-3 md:p-4 rounded-lg flex flex-wrap justify-between items-center gap-3">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="text-xs md:text-sm">
+                        <span class="text-zinc-400 uppercase tracking-wider">PP Atual:</span>
+                        <strong id="kit-pp-display" class="text-blue-400 text-base md:text-lg ml-1">70</strong>
+                        <span class="text-zinc-500">/ <span id="kit-max-pp-display">70</span></span>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="toggleKitEditMode()" id="btn-toggle-kit-edit" class="px-4 py-1.5 text-xs uppercase tracking-wider border border-white bg-white text-black font-bold rounded transition">Editar Kit</button>
+                </div>
+            </div>
+
+            <!-- KIT EDITOR PANEL -->
+            <div id="kit-editor-container" class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg space-y-6 hidden">
+                <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+                    <h2 class="text-base md:text-lg uppercase tracking-wider font-bold">Editor do Kit de Habilidades</h2>
+                    <button type="button" onclick="toggleKitEditMode()" class="px-4 py-1.5 text-xs uppercase tracking-wider bg-white text-black font-bold rounded">Concluir Edição</button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Título do Kit</label>
+                        <input type="text" id="kit-edit-title" placeholder="Nome do Kit / Personagem..." class="w-full p-2.5 border rounded" oninput="syncKitHeaderFromInputs()">
+                    </div>
+                    <div>
+                        <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">URL da Imagem de Capa / Arte Final (Opcional)</label>
+                        <input type="text" id="kit-edit-banner" placeholder="https://..." class="w-full p-2.5 border rounded" oninput="syncKitHeaderFromInputs()">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Citação do Caminho (Deixa em branco para usar a oficial do PDF)</label>
+                        <input type="text" id="kit-edit-quote" placeholder="Citação personalizada..." class="w-full p-2.5 border rounded" oninput="syncKitHeaderFromInputs()">
+                    </div>
+                </div>
+
+                <!-- Passives Editor -->
+                <div class="space-y-3 border-t border-zinc-800 pt-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm uppercase tracking-widest font-bold">Passivas do Kit</h3>
+                        <button type="button" onclick="addKitPassive()" class="px-3 py-1.5 text-xs uppercase tracking-wider border border-zinc-600 bg-zinc-900 hover:border-white font-bold rounded">+ Adicionar Passiva</button>
+                    </div>
+                    <div id="kit-passives-editor-list" class="space-y-4"></div>
+                </div>
+
+                <!-- Active Skills Editor -->
+                <div class="space-y-3 border-t border-zinc-800 pt-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-sm uppercase tracking-widest font-bold">Habilidades Ativas do Kit</h3>
+                        <button type="button" onclick="addKitActiveSkill()" class="px-3 py-1.5 text-xs uppercase tracking-wider border border-white bg-white text-black font-bold rounded">+ Adicionar Habilidade</button>
+                    </div>
+                    <div id="kit-skills-editor-list" class="space-y-4"></div>
+                </div>
+            </div>
+
+            <!-- KIT EDITORIAL SHOWROOM -->
+            <div id="kit-showroom-container" class="bg-black border border-zinc-900 px-5 py-8 md:px-14 md:py-12 rounded-lg max-w-4xl mx-auto space-y-10 transition"></div>
+
+        </div>
+
+        <!-- ================= MASTER PANEL ================= -->
+        <div id="view-master" class="space-y-6 hidden tab-animate">
+            <div class="bg-zinc-950 border border-zinc-800 p-4 md:p-6 rounded-lg space-y-6">
+                <h2 class="text-base md:text-lg uppercase tracking-wider font-bold border-b border-zinc-800 pb-3">Painel de Controlo do Mestre</h2>
+                
+                <div class="p-4 border border-zinc-800 rounded bg-black space-y-3">
+                    <h3 class="text-xs uppercase tracking-widest font-bold">Autenticação do Mestre</h3>
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="password" id="master-pass" placeholder="Senha do Mestre" class="p-2.5 border rounded w-full sm:w-64">
+                        <button type="button" onclick="masterLoadAllCloud()" class="px-4 py-2 text-xs uppercase tracking-wider border border-white bg-white text-black font-bold rounded">Autenticar & Ativar Painel Ao Vivo</button>
+                    </div>
+                </div>
+
+                <!-- Global Limits & Inspection Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border border-zinc-800 rounded bg-black">
+                        <div>
+                            <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Limite Máx. Atributo</label>
+                            <input type="number" id="master-max-attr" value="5" min="1" max="20" class="w-full p-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-xs uppercase tracking-widest text-zinc-400 mb-1">Limite Máx. Perícia</label>
+                            <input type="number" id="master-max-skill" value="20" min="0" max="100" class="w-full p-2 border rounded">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <button type="button" onclick="updateMasterSettings()" class="w-full py-2 text-xs uppercase tracking-wider border border-zinc-600 bg-zinc-900 hover:border-white font-bold rounded">Guardar Limites na Nuvem</button>
+                        </div>
+                    </div>
+
+                    <div class="p-4 border border-zinc-800 rounded bg-black flex flex-col justify-between space-y-3">
+                        <h3 class="text-xs uppercase tracking-widest font-bold">Inspecionar Ficha por ID</h3>
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <input type="text" id="master-search-id" placeholder="Ex: arthur" class="p-2 border rounded w-full">
+                            <button type="button" onclick="masterSearchById()" class="px-4 py-2 text-xs uppercase tracking-wider border border-zinc-600 bg-zinc-900 hover:border-white font-bold rounded shrink-0">Abrir Ficha</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- INITIATIVE & TURN TRACKER -->
+                <div class="p-4 border border-zinc-800 rounded bg-black space-y-4">
+                    <div class="flex flex-wrap justify-between items-center gap-2 border-b border-zinc-900 pb-2">
+                        <div>
+                            <h3 class="text-xs md:text-sm uppercase tracking-widest font-bold text-white">Fila de Iniciativa & Controlo de Turnos</h3>
+                            <p class="text-[11px] text-zinc-400">Move combatentes na fila (Caminhos da Ordem e Espaço) e controla a rodada atual.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <span class="text-xs px-2.5 py-1 border border-zinc-700 bg-zinc-900 rounded">Rodada: <strong id="init-round-display" class="text-white">1</strong></span>
+                            <button type="button" onclick="nextInitiativeTurn()" class="px-3 py-1.5 text-xs uppercase tracking-wider bg-white text-black font-bold rounded">Próximo Turno ➔</button>
+                            <button type="button" onclick="sortInitiativeList()" class="px-2.5 py-1.5 text-xs uppercase border border-zinc-700 hover:border-white rounded">Ordenar</button>
+                            <button type="button" onclick="importPlayersToInitiative()" class="px-2.5 py-1.5 text-xs uppercase border border-zinc-700 hover:border-white rounded">+ Puxar Jogadores</button>
+                            <button type="button" onclick="clearInitiativeTracker()" class="px-2.5 py-1.5 text-xs uppercase border border-red-900 text-red-400 hover:bg-red-950 rounded">Limpar</button>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text" id="init-new-name" placeholder="Nome do Combatente / Inimigo..." class="p-2 text-xs border rounded flex-1">
+                        <input type="number" id="init-new-val" placeholder="Iniciativa (Ex: 18)" class="p-2 text-xs border rounded w-full sm:w-36 text-center">
+                        <button type="button" onclick="addInitiativeCombatant()" class="px-4 py-2 text-xs uppercase tracking-wider border border-zinc-600 bg-zinc-900 hover:border-white font-bold rounded">+ Adicionar à Fila</button>
+                    </div>
+
+                    <div id="master-initiative-list" class="space-y-1.5"></div>
+                </div>
+
+                <!-- Real-Time Roll Feed & Players/Enemies Combat Tracker Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-6">
+                        <!-- Players List -->
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-xs uppercase tracking-widest font-bold">Fichas dos Jogadores (PV, PP, Escudo & DoTs)</h3>
+                                <button type="button" onclick="masterLoadAllCloud(true)" class="text-xs text-zinc-400 hover:text-white underline">Atualizar Lista</button>
+                            </div>
+                            <div id="master-players-list" class="space-y-3">
+                                <p class="text-zinc-500 text-sm italic">Insere a senha de Mestre e clica em autenticar.</p>
+                            </div>
+                        </div>
+
+                        <!-- Master NPCs / Bosses Combat Tracker with Posture Cubes -->
+                        <div class="space-y-3 border-t border-zinc-800 pt-5">
+                            <div class="flex flex-wrap justify-between items-center gap-2">
+                                <div>
+                                    <h3 class="text-xs md:text-sm uppercase tracking-widest font-bold text-amber-400">Fichas de Inimigos & Sistema de Postura (Quebra de Guarda)</h3>
+                                    <p class="text-[11px] text-zinc-400">Define as Fraquezas Elementais e os Cubinhos de Postura (5/5, 6/6). Esgotar a postura quebra a guarda e aplica o Debuff Elemental automaticamente.</p>
+                                </div>
+                                <button type="button" onclick="addMasterNpc()" class="px-3.5 py-2 text-xs uppercase tracking-wider border border-amber-500 bg-amber-950/40 hover:bg-amber-900/60 text-amber-200 font-bold rounded transition">+ Criar Inimigo / Boss</button>
+                            </div>
+                            <div id="master-npcs-list" class="space-y-4"></div>
+                        </div>
+                    </div>
+
+                    <!-- Real-Time Roll Logs -->
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-xs uppercase tracking-widest font-bold">Feed de Rolagens (Tempo Real)</h3>
+                            <button type="button" onclick="clearMasterRollLogs()" class="text-xs text-red-400 hover:text-red-300 underline">Limpar</button>
+                        </div>
+                        <div id="master-roll-logs" class="border border-zinc-800 rounded bg-black p-3 h-[640px] overflow-y-auto space-y-2.5">
+                            <p class="text-zinc-500 text-xs italic">Autentica-te como Mestre para veres as rolagens em tempo real.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/85 flex items-center justify-center hidden p-4 z-50">
+        <div class="bg-zinc-950 border border-zinc-700 p-6 rounded-lg max-w-sm w-full text-center space-y-5 dice-modal-animate">
+            <h3 class="text-xs uppercase tracking-widest text-zinc-400">Confirmação</h3>
+            <p id="confirm-modal-message" class="text-sm text-white leading-relaxed"></p>
+            <div class="flex gap-3">
+                <button type="button" onclick="closeConfirmModal(false)" class="flex-1 py-2.5 border border-zinc-700 hover:border-white text-xs uppercase tracking-wider font-bold rounded">Cancelar</button>
+                <button type="button" onclick="closeConfirmModal(true)" class="flex-1 py-2.5 bg-white text-black text-xs uppercase tracking-wider font-bold rounded">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Guia dos Caminhos Vivos -->
+    <div id="path-guide-modal" class="fixed inset-0 bg-black/85 flex items-center justify-center hidden p-4 z-50">
+        <div class="bg-zinc-950 border border-zinc-700 p-6 rounded-lg max-w-3xl w-full max-h-[85vh] overflow-y-auto space-y-6 dice-modal-animate">
+            <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+                <h3 class="text-lg font-bold uppercase tracking-widest">Sistema – Caminhos Jornada RPG</h3>
+                <button type="button" onclick="togglePathGuideModal()" class="px-3 py-1 bg-white text-black font-bold text-xs uppercase rounded">Fechar</button>
+            </div>
+            <div id="path-guide-content" class="space-y-6"></div>
+        </div>
+    </div>
+
+    <!-- Modal: Guia de Elementos & DoTs -->
+    <div id="elements-guide-modal" class="fixed inset-0 bg-black/85 flex items-center justify-center hidden p-4 z-50">
+        <div class="bg-zinc-950 border border-zinc-700 p-6 rounded-lg max-w-3xl w-full max-h-[85vh] overflow-y-auto space-y-6 dice-modal-animate">
+            <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+                <div>
+                    <h3 class="text-lg font-bold uppercase tracking-widest">Elementos & DoTs – Jornada RPG</h3>
+                    <p class="text-xs text-zinc-400">Efeitos Especiais aplicados quando o usuário critar ou quebrar a guarda do oponente.</p>
+                </div>
+                <button type="button" onclick="toggleElementsGuideModal()" class="px-3 py-1 bg-white text-black font-bold text-xs uppercase rounded">Fechar</button>
+            </div>
+            <div id="elements-guide-content" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- Dice Roll Modal -->
+    <div id="dice-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden p-4 z-50">
+        <div id="dice-modal-box" class="bg-zinc-950 border border-zinc-700 p-6 rounded-lg max-w-md w-full text-center space-y-4 dice-modal-animate">
+            <h3 class="text-xs uppercase tracking-widest text-zinc-400">Resultado</h3>
+            <div id="dice-result-content" class="space-y-2"></div>
+            <button type="button" onclick="closeDiceModal()" class="w-full py-2.5 bg-white text-black font-bold uppercase tracking-wider text-xs rounded">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Scripts Separados por Responsabilidade -->
+    <script src="data.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
